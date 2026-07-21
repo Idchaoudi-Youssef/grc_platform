@@ -82,6 +82,7 @@ def test_imports_one_valid_finding_and_matches_asset_by_ip(db_session):
     assert finding.first_seen_at == finding.last_seen_at
     assert finding.first_seen_at == finding.scan.scan_date
     assert finding.vulnerability.detected_at == finding.scan.scan_date
+    assert finding.vulnerability.solution == "Upgrade the service to a supported release."
     assert db_session.scalar(select(func.count()).select_from(Alert)) == 0
     assert db_session.scalar(select(func.count()).select_from(RiskTreatment)) == 0
 

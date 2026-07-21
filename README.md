@@ -39,12 +39,15 @@ app/
   services/
     openvas_import.py Transactional storage of normalized findings
     risk_scoring.py Contextual GRC risk calculation and bulk scoring
+    detection_remediation.py Rule-based alerts and automatic treatment tasks
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
   test_models.py Database model and relationship tests
   test_openvas_parser.py OpenVAS parser tests
   test_openvas_import.py OpenVAS database import tests
+  test_risk_scoring.py Contextual scoring tests
+  test_detection_remediation.py Detection and task-creation tests
   fixtures/openvas/ Sanitized XML examples used only by tests
 requirements.txt Python dependencies
 ```
@@ -207,6 +210,41 @@ every score from that bulk operation.
 OpenVAS `Vulnerability.severity` remains the scanner's technical classification.
 The M5 `RiskLevel` is a separate contextual business-risk classification. M5
 does not create alerts or remediation treatments.
+
+## Rule-based detection and automated remediation
+
+Milestone 6 applies one transparent application-level correlation rule to scored
+findings. The stable rule key is `critical_contextual_risk_v1`. It matches only
+when all these conditions are true:
+
+- contextual `risk_score` is at least `75.00`;
+- asset business criticality is at least `4`;
+- finding status is not `fixed`;
+- the contextual score is not null.
+
+When the rule matches, the service creates a critical, unacknowledged alert. Its
+message contains the asset name and IP, vulnerability title, CVE or technical
+identity, and contextual score. It also creates a pending automatic treatment
+owned by the asset owner and due seven days after evaluation. The OpenVAS
+solution is used when available; otherwise the task recommends reviewing the
+service, applying the vendor patch or mitigation, validating the correction, and
+scanning again.
+
+Example: an open finding with score `90.00` on a criticality-5 server matches the
+rule. The application creates one critical alert and one pending remediation task
+due in seven days. It does **not** run a patch command, change the affected
+system, isolate the asset, send email, or perform any network action. In this
+project, “automated remediation” means automatically creating a tracked GRC task.
+
+Both alerts and treatments have an optional `rule_key`. Manual records use a
+null key. Database uniqueness on `(asset_vulnerability_id, rule_key)` prevents
+duplicate automatic records, while repeated runs reuse the existing records and
+can repair partial state where only the alert or only the treatment exists.
+
+The one-record service flushes but does not commit. The bulk service processes
+one scan or all scored findings and commits once. A validation problem on one
+finding is reported without blocking the others; a fatal database error rolls
+back the complete bulk operation.
 
 ## Set up and run on Windows PowerShell
 

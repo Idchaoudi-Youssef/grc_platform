@@ -190,6 +190,7 @@ class Vulnerability(Base):
     cvss_score: Mapped[float] = mapped_column(Float, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    solution: Mapped[str | None] = mapped_column(Text, nullable=True)
     severity: Mapped[Severity] = mapped_column(
         SqlEnum(
             Severity,
@@ -280,6 +281,13 @@ class RiskTreatment(Base):
     """A remediation action used to manage one asset finding."""
 
     __tablename__ = "risk_treatments"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_vulnerability_id",
+            "rule_key",
+            name="uq_treatment_finding_rule",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     asset_vulnerability_id: Mapped[int] = mapped_column(
@@ -287,6 +295,7 @@ class RiskTreatment(Base):
         nullable=False,
         index=True,
     )
+    rule_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     action: Mapped[str] = mapped_column(Text, nullable=False)
     owner: Mapped[str] = mapped_column(String(100), nullable=False)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -317,6 +326,13 @@ class Alert(Base):
     """A notification attached to a noteworthy asset finding."""
 
     __tablename__ = "alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "asset_vulnerability_id",
+            "rule_key",
+            name="uq_alert_finding_rule",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     asset_vulnerability_id: Mapped[int] = mapped_column(
@@ -324,6 +340,7 @@ class Alert(Base):
         nullable=False,
         index=True,
     )
+    rule_key: Mapped[str | None] = mapped_column(String(100), nullable=True)
     level: Mapped[AlertLevel] = mapped_column(
         SqlEnum(
             AlertLevel,

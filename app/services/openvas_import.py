@@ -215,6 +215,7 @@ def _get_or_create_vulnerability(
         cvss_score=finding.cvss_score,
         title=finding.title,
         description=finding.description,
+        solution=finding.solution,
         severity=SEVERITY_MAP[finding.severity],
         detected_at=detected_at,
         source=source,
@@ -235,6 +236,8 @@ def _warn_about_metadata_conflict(
         conflicting_fields.append("title")
     if vulnerability.description != finding.description:
         conflicting_fields.append("description")
+    if vulnerability.solution != finding.solution:
+        conflicting_fields.append("solution")
     if vulnerability.cvss_score != finding.cvss_score:
         conflicting_fields.append("cvss_score")
     if vulnerability.severity != incoming_severity:

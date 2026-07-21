@@ -220,7 +220,7 @@ specialist. Optimize for learning and traceability:
 - Calculate and store risk on `AssetVulnerability`
 - Add boundary-focused unit tests and prioritized result endpoints
 
-### M6 - Implement rule-based detection and remediation
+### M6 - Implement rule-based detection and remediation (completed)
 
 - Evaluate findings after import/scoring
 - Create idempotent critical alerts and automatically generated treatments
