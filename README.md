@@ -30,7 +30,7 @@ asset.
 ```text
 app/
   database.py   SQLite connection and request sessions
-  models.py     SQLAlchemy Asset table
+  models.py     SQLAlchemy tables and relationships
   schemas.py    Pydantic input/output validation
   crud.py       Create, read, update, and delete database operations
   main.py       FastAPI application and URL endpoints
@@ -39,6 +39,43 @@ tests/
   test_assets.py API and validation tests
 requirements.txt Python dependencies
 ```
+
+## Core data model
+
+Milestone 2 adds the database foundation needed for later OpenVAS imports. It
+does not add API endpoints or import logic yet.
+
+- **Asset** is a system, application, database, or device that the organization
+  needs to protect.
+- **Scan** records when a scan happened, where it came from, and its finding
+  total. Keeping separate scans makes historical trends possible later.
+- **Vulnerability** describes the technical weakness, including its optional CVE,
+  CVSS score, severity, and source. A CVE is optional because OpenVAS can report
+  findings that do not have one.
+- **AssetVulnerability** records that one vulnerability was observed on one asset
+  in one scan. Its workflow status and future contextual risk score belong here,
+  because the same vulnerability can have different business risk on different
+  assets.
+- **RiskTreatment** records a remediation decision or action, its owner, due date,
+  status, evidence, and whether it was generated automatically.
+- **Alert** records a noteworthy finding and whether someone has acknowledged it.
+
+The relationships are:
+
+```text
+Asset -----------< AssetVulnerability >----------- Vulnerability
+                           ^
+                           |
+                         Scan
+                           |
+                           +--------< RiskTreatment
+                           |
+                           +--------< Alert
+```
+
+An asset-vulnerability-scan combination can occur only once. SQLite foreign-key
+enforcement prevents findings from referring to records that do not exist, and
+deleting a parent record removes its dependent finding data.
 
 ## Set up and run on Windows PowerShell
 

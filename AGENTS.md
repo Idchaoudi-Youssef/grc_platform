@@ -193,7 +193,7 @@ specialist. Optimize for learning and traceability:
 - Handle the existing SQLite schema safely
 - Update CRUD tests and README examples
 
-### M2 - Add the core relational schema
+### M2 - Add the core relational schema (completed)
 
 - Add `Scan`, `Vulnerability`, `AssetVulnerability`, `RiskTreatment`, and `Alert`
   models with enums, constraints, relationships, and timestamps
