@@ -1,11 +1,10 @@
-# GRC Vulnerability Management API — Milestone 1
+# GRC Vulnerability Management Platform
 
-This project is a small backend for keeping an **asset inventory**, an important
-starting point for vulnerability management. An asset can represent a server,
-network device, workstation, or service that your organization needs to protect.
-
-This milestone deliberately contains no frontend, authentication, scanner,
-Docker, or PostgreSQL configuration.
+This educational platform tracks an **asset inventory**, imports sanitized
+OpenVAS results, calculates contextual business risk, creates rule-based alerts
+and remediation tasks, and displays the stored GRC posture in a small read-only
+dashboard. It deliberately contains no authentication, Docker, PostgreSQL, or
+direct scanner connection yet.
 
 ## What is included
 
@@ -14,6 +13,7 @@ Docker, or PostgreSQL configuration.
 - **SQLAlchemy** translates Python operations into database queries.
 - **SQLite** stores data locally in `grc.db` without a separate database server.
 - **pytest** automatically checks the API's expected and invalid-data behavior.
+- **Streamlit** displays a small read-only dashboard from existing SQLite data.
 
 Each asset has a name, a unique IPv4 or IPv6 address, an asset type, an owner,
 business criticality from 1 (lowest) to 5 (highest), exposure of `internal` or
@@ -41,6 +41,12 @@ app/
     risk_scoring.py Contextual GRC risk calculation and bulk scoring
     detection_remediation.py Rule-based alerts and automatic treatment tasks
     grc_pipeline.py Atomic end-to-end workflow orchestration
+dashboard/
+  streamlit_app.py Read-only Streamlit interface
+  data.py       Tested queries, filters, and aggregations
+scripts/
+  demo_pipeline.py End-to-end M7 demonstration
+  prepare_dashboard_demo.py Safe M8 dashboard data preparation
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
@@ -49,6 +55,7 @@ tests/
   test_openvas_import.py OpenVAS database import tests
   test_risk_scoring.py Contextual scoring tests
   test_detection_remediation.py Detection and task-creation tests
+  test_dashboard_data.py Read-only query and aggregation tests
   fixtures/openvas/ Sanitized XML examples used only by tests
 requirements.txt Python dependencies
 ```
@@ -293,6 +300,67 @@ Prioritized findings:
   2. DEMO - Internal analyst workstation | CVE-2026-7002 | risk=22.67 (low)
   3. DEMO - Internal analyst workstation | CVE-2026-7003 | risk=22.67 (low)
 ```
+
+## Read-only Streamlit dashboard
+
+Milestone 8 visualizes data that is already stored in SQLite. Streamlit is the
+only new direct dependency and is installed with the normal requirements:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Prepare the dedicated sanitized dashboard database:
+
+```powershell
+python scripts\prepare_dashboard_demo.py
+```
+
+The script safely recreates only `scripts/grc_dashboard_demo.db`. It never opens,
+deletes, or modifies the normal `grc.db`, and generated `*.db` files are ignored
+by Git. Its data includes four assets, two scans, every contextual risk level,
+mixed alert acknowledgement, and pending, in-progress, completed, and overdue
+treatment examples.
+
+Start the dashboard with the normal `grc.db` selected by default:
+
+```powershell
+streamlit run dashboard\streamlit_app.py
+```
+
+To start with the demonstration database selected, set the optional environment
+variable for the current PowerShell session:
+
+```powershell
+$env:GRC_DASHBOARD_DB = (Resolve-Path .\scripts\grc_dashboard_demo.db).Path
+streamlit run dashboard\streamlit_app.py
+```
+
+You can also paste a database path into the dashboard sidebar. The selected file
+must already exist and contain the expected tables. The dashboard opens it with
+SQLite `mode=ro` and `PRAGMA query_only=ON`; it cannot create, reset, or modify
+records.
+
+The dashboard contains:
+
+- **Executive overview:** assets, scans, findings, critical risks, alerts,
+  treatments, completion rate, average risk, overdue work, and latest scan.
+- **Risks by contextual level:** low, medium, high, and critical counts, with an
+  explicit separate count for unscored findings.
+- **Technical severity versus contextual risk:** shows scanner CVSS/severity next
+  to the M5 business-context score and level.
+- **Prioritized findings and top risky assets:** sorts risks by score and groups
+  asset exposure.
+- **Alerts and remediation treatments:** shows acknowledgement, ownership,
+  deadlines, workflow status, automatic creation, and overdue state.
+- **Scan history:** shows import counts, average risk, critical counts, alerts,
+  and a trend chart when at least two scans are visible.
+
+Sidebar filters cover scan, asset, asset type, exposure, contextual risk level,
+finding status, and technical severity. The reset button clears all selections.
+All dashboard operations in M8 are read-only: there is no asset editing, XML
+upload, pipeline execution, alert acknowledgement, or treatment update control.
 
 ## Set up and run on Windows PowerShell
 

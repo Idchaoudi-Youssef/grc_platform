@@ -234,7 +234,7 @@ specialist. Optimize for learning and traceability:
 - Add an integration test covering the entire flow
 - Prepare the legal isolated Greenbone/Metasploitable lab procedure
 
-### M8 - Add a minimal Streamlit dashboard
+### M8 - Add a minimal Streamlit dashboard (completed)
 
 - Show risk by level, critical open count, unacknowledged alerts, treatment rate,
   top risky assets, and risk trend
