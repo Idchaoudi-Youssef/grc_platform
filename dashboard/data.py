@@ -285,6 +285,7 @@ def get_alerts(db: Session, findings: list[dict[str, object]]) -> list[dict[str,
     return [
         {
             "alert_id": alert.id,
+            "finding_id": alert.asset_vulnerability_id,
             "level": alert.level.value,
             "message": alert.message,
             "created_at": alert.created_at,
@@ -321,6 +322,7 @@ def get_treatments(
     return [
         {
             "treatment_id": treatment.id,
+            "finding_id": treatment.asset_vulnerability_id,
             "asset": treatment.asset_vulnerability.asset.name,
             "vulnerability": _vulnerability_identity(treatment.asset_vulnerability),
             "action": treatment.action,
@@ -328,6 +330,8 @@ def get_treatments(
             "due_date": treatment.due_date,
             "status": treatment.status.value,
             "auto_created": treatment.auto_created,
+            "evidence": treatment.evidence,
+            "resolved_at": treatment.resolved_at,
             "overdue": bool(
                 treatment.due_date
                 and treatment.due_date < today
@@ -411,8 +415,11 @@ def _finding_row(record: AssetVulnerability) -> dict[str, object]:
         "asset_type": record.asset.asset_type.value,
         "business_criticality": record.asset.business_criticality,
         "exposure": record.asset.exposure.value,
+        "asset_owner": record.asset.owner,
         "vulnerability": _vulnerability_identity(record),
         "vulnerability_title": record.vulnerability.title,
+        "vulnerability_description": record.vulnerability.description,
+        "solution": record.vulnerability.solution,
         "cvss": record.vulnerability.cvss_score,
         "technical_severity": record.vulnerability.severity.value,
         "contextual_risk_score": score,

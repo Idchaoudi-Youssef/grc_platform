@@ -240,7 +240,7 @@ specialist. Optimize for learning and traceability:
   top risky assets, and risk trend
 - Add useful filters without turning the dashboard into a large frontend project
 
-### M9 - Generate GRC PDF reports
+### M9 - Generate GRC PDF reports (completed)
 
 - Generate a technical findings report
 - Generate a one-page executive summary from the same data

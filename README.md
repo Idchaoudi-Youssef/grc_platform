@@ -41,12 +41,19 @@ app/
     risk_scoring.py Contextual GRC risk calculation and bulk scoring
     detection_remediation.py Rule-based alerts and automatic treatment tasks
     grc_pipeline.py Atomic end-to-end workflow orchestration
+  reports/
+    data.py      Shared read-only report snapshot and deterministic rules
+    charts.py    Temporary local Matplotlib charts
+    executive.py Concise management PDF report
+    technical.py Detailed analyst and audit PDF report
+    styles.py    Shared ReportLab typography, tables, and page footer
 dashboard/
   streamlit_app.py Read-only Streamlit interface
   data.py       Tested queries, filters, and aggregations
 scripts/
   demo_pipeline.py End-to-end M7 demonstration
   prepare_dashboard_demo.py Safe M8 dashboard data preparation
+  generate_reports.py Read-only executive and technical PDF generation
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
@@ -56,6 +63,7 @@ tests/
   test_risk_scoring.py Contextual scoring tests
   test_detection_remediation.py Detection and task-creation tests
   test_dashboard_data.py Read-only query and aggregation tests
+  test_reports.py PDF data, generation, extraction, and integrity tests
   fixtures/openvas/ Sanitized XML examples used only by tests
 requirements.txt Python dependencies
 ```
@@ -361,6 +369,54 @@ Sidebar filters cover scan, asset, asset type, exposure, contextual risk level,
 finding status, and technical severity. The reset button clears all selections.
 All dashboard operations in M8 are read-only: there is no asset editing, XML
 upload, pipeline execution, alert acknowledgement, or treatment update control.
+
+## Executive and technical PDF reports
+
+Milestone 9 generates two professional reports from an existing SQLite database:
+
+- **Executive report:** a concise management view of posture, KPIs, top open
+  priorities, contextual-risk distribution, top risks, and fixed management
+  recommendations.
+- **Technical report:** a detailed analyst/auditor view of scope, methodology,
+  assets, prioritized findings, OpenVAS descriptions and solutions, alerts,
+  treatments, scan information, and limitations.
+
+ReportLab creates the PDFs, Matplotlib creates two temporary local charts, and
+pypdf verifies report signatures, pages, and extractable text. The chart images
+are removed immediately after embedding. These dependencies are installed with:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Prepare the sanitized dashboard database, then generate both reports:
+
+```powershell
+python scripts\prepare_dashboard_demo.py
+python scripts\generate_reports.py `
+  --database scripts\grc_dashboard_demo.db `
+  --output-dir output\pdf `
+  --organization "Demo Organization" `
+  --generation-date "2026-07-21T12:00:00+00:00"
+```
+
+This creates only:
+
+```text
+output/pdf/executive_report.pdf
+output/pdf/technical_report.pdf
+```
+
+Use `--scan-id` to report a specific scan; otherwise the latest scan is selected.
+Use `--title` for a custom common title prefix. Generated PDF directories are
+ignored by Git.
+
+Report generation is read-only. Database paths are opened using SQLite
+`mode=ro` and `PRAGMA query_only=ON`. The generators never calculate new scores,
+create alerts or treatments, acknowledge records, or commit database changes.
+The reports clearly distinguish OpenVAS technical severity from contextual
+business risk and state that automated remediation means tracked task creation,
+not automatic patching.
 
 ## Set up and run on Windows PowerShell
 
