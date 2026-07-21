@@ -38,6 +38,7 @@ app/
     openvas.py  Secure OpenVAS XML parsing and normalization
   services/
     openvas_import.py Transactional storage of normalized findings
+    risk_scoring.py Contextual GRC risk calculation and bulk scoring
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
@@ -162,6 +163,50 @@ constraint, even when records are created outside the importer.
 The import result reports created/reused vulnerabilities, imported
 relationships, skipped findings, unknown assets, warnings, and errors. M4 does
 not calculate risk and does not create alerts or treatment actions.
+
+## Contextual GRC risk scoring
+
+Milestone 5 translates technical CVSS severity into business context. The exact
+formula is:
+
+```text
+raw score = CVSS × business criticality × exposure factor
+risk score = (raw score / 75) × 100
+```
+
+The denominator is `75` because the theoretical maximum is `10 × 5 × 1.5`.
+Internal exposure uses factor `1.0`; external exposure uses `1.5`. The final
+score is clamped to 0–100 and rounded to two decimal places before it is stored
+on `AssetVulnerability`.
+
+Contextual risk levels are:
+
+| Stored score | Risk level |
+|---|---|
+| 0.00–24.99 | Low |
+| 25.00–49.99 | Medium |
+| 50.00–74.99 | High |
+| 75.00–100.00 | Critical |
+
+Examples:
+
+1. An external critical server with CVSS `9.0` and criticality `5` has raw score
+   `9.0 × 5 × 1.5 = 67.5`, normalized score `90.00`, and **critical** risk.
+2. An internal workstation with CVSS `8.5` and criticality `2` has raw score
+   `17`, normalized score `22.67`, and **low** risk.
+3. An internal database with CVSS `7.5` and criticality `5` has raw score `37.5`,
+   normalized score `50.00`, and **high** risk.
+
+The pure calculation function does not use the database. A one-finding service
+assigns a score without committing, while the bulk service scores either one
+scan or all findings in a single transaction. By default, already scored records
+are skipped; `force=True` recalculates them. An invalid individual record is
+reported without blocking other valid records. A fatal database error rolls back
+every score from that bulk operation.
+
+OpenVAS `Vulnerability.severity` remains the scanner's technical classification.
+The M5 `RiskLevel` is a separate contextual business-risk classification. M5
+does not create alerts or remediation treatments.
 
 ## Set up and run on Windows PowerShell
 

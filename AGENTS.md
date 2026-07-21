@@ -214,7 +214,7 @@ specialist. Optimize for learning and traceability:
 - Report unknown hosts instead of silently dropping them
 - Make re-import behavior explicit and idempotent
 
-### M5 - Implement contextual risk scoring
+### M5 - Implement contextual risk scoring (completed)
 
 - Define normalization and Low/Medium/High/Critical thresholds precisely
 - Calculate and store risk on `AssetVulnerability`
