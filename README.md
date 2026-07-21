@@ -47,6 +47,10 @@ app/
     executive.py Concise management PDF report
     technical.py Detailed analyst and audit PDF report
     styles.py    Shared ReportLab typography, tables, and page footer
+  lab/
+    greenbone_preflight.py Non-destructive Docker, HTTPS, disk, and target checks
+    report_validation.py Read-only normalized XML summaries
+    report_import.py Safe dry-run or explicitly confirmed pipeline import
 dashboard/
   streamlit_app.py Read-only Streamlit interface
   data.py       Tested queries, filters, and aggregations
@@ -54,6 +58,9 @@ scripts/
   demo_pipeline.py End-to-end M7 demonstration
   prepare_dashboard_demo.py Safe M8 dashboard data preparation
   generate_reports.py Read-only executive and technical PDF generation
+  check_greenbone_lab.py Manual lab readiness report
+  validate_openvas_report.py Secure XML validation without SQLite access
+  import_openvas_report.py Dry-run-first use of the existing GRC pipeline
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
@@ -417,6 +424,53 @@ create alerts or treatments, acknowledge records, or commit database changes.
 The reports clearly distinguish OpenVAS technical severity from contextual
 business risk and state that automated remediation means tracked task creation,
 not automatic patching.
+
+## Manual Greenbone/OpenVAS lab (M10A)
+
+M10A prepares a reproducible **educational lab integration** without controlling
+Greenbone. It does not install containers, create targets, start scans, use GMP,
+or scan third-party systems. Greenbone remains a separately managed scanner;
+this application receives a manually exported XML report.
+
+Start with the [Greenbone lab setup](docs/lab/greenbone_setup.md) and use the
+[authorized scan checklist](docs/lab/real_scan_checklist.md). The setup links to
+Greenbone's latest official Compose download; the Compose file and local lab
+credentials are not stored in this repository.
+
+Non-destructive readiness check:
+
+```powershell
+python scripts\check_greenbone_lab.py --help
+```
+
+Validate a private XML export with the secure M3 parser and no database access:
+
+```powershell
+python scripts\validate_openvas_report.py C:\private-scans\report.xml --show-first-five
+```
+
+Dry-run the complete existing pipeline against a temporary copy of an existing
+database. This is the default and leaves the selected database unchanged:
+
+```powershell
+python scripts\import_openvas_report.py C:\private-scans\report.xml `
+  --database .\grc.db
+```
+
+After reviewing the dry-run result, a separately approved real import requires
+the explicit flag:
+
+```powershell
+python scripts\import_openvas_report.py C:\private-scans\report.xml `
+  --database .\grc.db `
+  --confirm-import
+```
+
+The confirmed path reuses the M7 parser/import/scoring/detection pipeline and its
+single final commit. It never creates a Greenbone scan or target and never sends
+email/webhooks, patches a host, or runs an external remediation command. Manual
+XML exchange is the M10A boundary; Greenbone Management Protocol/API automation
+is deferred to a later, separately approved milestone.
 
 ## Set up and run on Windows PowerShell
 

@@ -6,3 +6,26 @@ __pycache__/
 output/pdf/
 reports/generated/
 tmp/pdfs/
+
+# M10A: real scanner data, local lab state, credentials, backups, and logs
+*.xml
+!tests/fixtures/**/*.xml
+scan_exports/
+real_reports/
+private_scans/
+greenbone-community-edition/
+compose.greenbone.local.yaml
+.env.greenbone*
+lab_credentials/
+*.lab-credentials
+*.db.bak
+*.sqlite.bak
+backups/
+lab_logs/
+*.greenbone.log
+*.dry-run.db
+grc_openvas_dry_run_*.db
+*.vdi
+*.vmdk
+*.ova
+*.ovf

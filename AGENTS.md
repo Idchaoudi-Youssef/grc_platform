@@ -246,12 +246,23 @@ specialist. Optimize for learning and traceability:
 - Generate a one-page executive summary from the same data
 - Include readable charts and verify rendered PDFs visually
 
-### M10 - Reproducibility and final verification
+### M10A - Safe manual Greenbone/OpenVAS lab integration (completed)
 
-- Add the approved Docker/Greenbone setup and safe lab documentation
-- Optionally automate GMP access only after manual XML import is solid
-- Consider PostgreSQL only if the complete pipeline needs it
-- Run the complete end-to-end demonstration and update all documentation
+- Document the official Greenbone Community Containers setup without vendoring
+  or modifying its Compose file
+- Keep the vulnerable target isolated and require explicit scan authorization
+- Add non-destructive Docker, HTTPS, target, and disk preflight checks
+- Validate exported XML with the existing secure parser and no database access
+- Dry-run the existing pipeline against a temporary SQLite backup by default
+- Require `--confirm-import` before the existing database can be changed
+
+### M10B - Optional scanner automation and final verification (deferred)
+
+- Consider GMP/python-gvm only after the manual M10A workflow is reviewed
+- Do not automatically create targets, schedules, credentials, or scans without
+  a separately approved design and safety boundary
+- Consider PostgreSQL only if the complete pipeline demonstrates a real need
+- Run the final authorized end-to-end demonstration and update documentation
 
 ### Optional extensions - only after M10
 
