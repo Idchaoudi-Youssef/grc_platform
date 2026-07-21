@@ -36,11 +36,14 @@ app/
   main.py       FastAPI application and URL endpoints
   parsers/
     openvas.py  Secure OpenVAS XML parsing and normalization
+  services/
+    openvas_import.py Transactional storage of normalized findings
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
   test_models.py Database model and relationship tests
   test_openvas_parser.py OpenVAS parser tests
+  test_openvas_import.py OpenVAS database import tests
   fixtures/openvas/ Sanitized XML examples used only by tests
 requirements.txt Python dependencies
 ```
@@ -113,6 +116,52 @@ resolved, and the parser performs no network access.
 
 This parser does **not** write to SQLite or use the SQLAlchemy models. Database
 import is deliberately deferred to a later milestone.
+
+## OpenVAS database import
+
+Milestone 4 adds a service in `app/services/openvas_import.py` that accepts an
+M3 parse result and a SQLAlchemy session. It performs one atomic database
+transaction using this sequence:
+
+1. Reject a parser result that has fatal XML errors and no valid findings.
+2. Create one `Scan` record, with source `openvas` unless another source is
+   supplied explicitly.
+3. Match each finding to an existing asset by its normalized IP address. Unknown
+   assets are reported and skipped; the importer never creates assets.
+4. Create or reuse vulnerabilities using the identity rules below.
+5. Create one unique `AssetVulnerability` relationship for each asset,
+   vulnerability, and scan combination.
+6. Commit everything together. A database error rolls back the scan and every
+   related record created during that import.
+
+For findings containing CVEs, each CVE represents one vulnerability. The same
+CVE and source reuse the existing vulnerability record. For a finding without a
+CVE, the importer uses `nvt:<OID>` when the NVT OID is present. Otherwise, it
+creates a deterministic SHA-256 fingerprint from the normalized title, port,
+description, solution, and threat. This stable `technical_id` avoids treating a
+title alone as identity.
+
+When an existing vulnerability is reused, its original title, description,
+CVSS score, severity, and initial detection time are preserved. Conflicting
+incoming metadata is reported as a warning instead of silently overwriting the
+trusted record.
+
+Duplicate findings for the same asset and vulnerability inside one scan are
+ignored with a warning. Importing the same report again creates a new scan and
+new scan-specific relationships, while reusing the vulnerability records.
+`first_seen_at` and `last_seen_at` both use that scan's date for now, and
+`risk_score` remains null. The scan total records the number of successfully
+imported unique `AssetVulnerability` relationships. Therefore, a finding with
+multiple CVEs contributes one relationship—and one unit in the scan total—for
+each imported CVE.
+
+Every vulnerability must have a stable identity: either `cve_id` or
+`technical_id` must be present. SQLite enforces this rule with a check
+constraint, even when records are created outside the importer.
+
+The import result reports created/reused vulnerabilities, imported
+relationships, skipped findings, unknown assets, warnings, and errors. M4 does
+not calculate risk and does not create alerts or treatment actions.
 
 ## Set up and run on Windows PowerShell
 

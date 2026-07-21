@@ -170,10 +170,23 @@ class Vulnerability(Base):
             "cvss_score BETWEEN 0 AND 10",
             name="ck_vulnerability_cvss_score",
         ),
+        CheckConstraint(
+            "cve_id IS NOT NULL OR technical_id IS NOT NULL",
+            name="ck_vulnerability_has_stable_identity",
+        ),
+        UniqueConstraint(
+            "source", "cve_id", name="uq_vulnerability_source_cve"
+        ),
+        UniqueConstraint(
+            "source", "technical_id", name="uq_vulnerability_source_technical_id"
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     cve_id: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    technical_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )
     cvss_score: Mapped[float] = mapped_column(Float, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

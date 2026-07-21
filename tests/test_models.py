@@ -229,10 +229,22 @@ def test_duplicate_asset_vulnerability_is_rejected(db_session):
 def test_vulnerability_can_have_no_cve(db_session):
     vulnerability = make_vulnerability()
     vulnerability.cve_id = None
+    vulnerability.technical_id = "nvt:1.3.6.1.4.1.25623.1.0.300001"
     db_session.add(vulnerability)
     db_session.commit()
 
     assert vulnerability.cve_id is None
+    assert vulnerability.technical_id is not None
+
+
+def test_vulnerability_without_any_stable_identity_is_rejected(db_session):
+    vulnerability = make_vulnerability()
+    vulnerability.cve_id = None
+    vulnerability.technical_id = None
+    db_session.add(vulnerability)
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
 
 
 @pytest.mark.parametrize("cvss_score", [0.0, 10.0])

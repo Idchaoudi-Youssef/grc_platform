@@ -207,7 +207,7 @@ specialist. Optimize for learning and traceability:
 - Normalize IPv4/IPv6 values and handle missing/malformed fields clearly
 - Keep parsing independent of both FastAPI and the database
 
-### M4 - Import one scan end to end
+### M4 - Import one scan end to end (completed)
 
 - Add an import service and a simple XML upload endpoint
 - Store the scan and findings and link findings to assets by normalized IP
