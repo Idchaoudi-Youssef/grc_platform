@@ -72,6 +72,7 @@ class BulkAutomationResult(BaseModel):
     failed_count: int = 0
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    database_failure: bool = False
 
 
 def evaluate_critical_contextual_risk(
@@ -207,6 +208,7 @@ def run_detection_remediation(
     scan_id: int | None = None,
     evaluation_date: date | None = None,
     include_processed: bool = True,
+    commit: bool = True,
 ) -> BulkAutomationResult:
     """Process scored findings for one scan or all scans in one transaction."""
     result = BulkAutomationResult(scan_id=scan_id)
@@ -241,10 +243,14 @@ def run_detection_remediation(
                 result.failed_count += 1
                 result.errors.append(f"Finding {finding.id} could not be processed: {exc}")
 
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return result
     except SQLAlchemyError as exc:
         db.rollback()
+        result.database_failure = True
         result.alerts_created_count = 0
         result.treatments_created_count = 0
         result.failed_count = result.examined_count - result.skipped_count

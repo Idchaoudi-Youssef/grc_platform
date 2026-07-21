@@ -33,6 +33,7 @@ class ImportResult(BaseModel):
     skipped_findings_count: int = 0
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    database_failure: bool = False
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ def import_openvas_results(
     *,
     scan_date: datetime | None = None,
     source: str = "openvas",
+    commit: bool = True,
 ) -> ImportResult:
     """Store normalized findings atomically without scoring or automation."""
     result = ImportResult(
@@ -139,10 +141,14 @@ def import_openvas_results(
                 result.skipped_findings_count += 1
 
         scan.total_vulnerabilities = result.imported_relationships_count
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return result
     except SQLAlchemyError as exc:
         db.rollback()
+        result.database_failure = True
         result.scan_id = None
         result.imported_relationships_count = 0
         result.created_vulnerabilities_count = 0

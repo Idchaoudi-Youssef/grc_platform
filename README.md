@@ -40,6 +40,7 @@ app/
     openvas_import.py Transactional storage of normalized findings
     risk_scoring.py Contextual GRC risk calculation and bulk scoring
     detection_remediation.py Rule-based alerts and automatic treatment tasks
+    grc_pipeline.py Atomic end-to-end workflow orchestration
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
@@ -245,6 +246,53 @@ The one-record service flushes but does not commit. The bulk service processes
 one scan or all scored findings and commits once. A validation problem on one
 finding is reported without blocking the others; a fatal database error rolls
 back the complete bulk operation.
+
+## Complete demonstration pipeline
+
+Milestone 7 connects the existing services in this exact order:
+
+```text
+OpenVAS XML -> secure parse -> database import -> contextual scoring
+            -> critical-risk detection -> alert and remediation task
+```
+
+The orchestrator calls the importer, scorer, and detection service without
+allowing them to commit independently. It performs one final commit after every
+stage succeeds. A fatal database failure during scoring, detection, or the final
+commit rolls back the imported scan and all related records. Expected conditions
+such as an unknown asset remain warnings and do not block valid findings.
+
+Run the standalone demonstration from the project directory:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\demo_pipeline.py
+```
+
+The script does not start a web server and does not require Greenbone/OpenVAS. It
+uses the sanitized M7 XML fixture and creates two assets labeled as demonstration
+data. It deletes and recreates only `scripts/grc_pipeline_demo.db`; it never
+deletes or connects to the normal `grc.db`. Running it repeatedly is safe.
+
+Example output:
+
+```text
+=== GRC PIPELINE DEMONSTRATION ===
+Data label: DEMONSTRATION DATA ONLY
+Pipeline success: True
+Scan ID: 1
+Parsed findings: 3
+Findings imported: 3
+Vulnerabilities scored: 3
+Alerts created: 1
+Treatments created: 1
+Warnings:
+  - Missing severity defaulted to 0.0 for the unknown demonstration host.
+  - Unknown asset 192.0.2.72 was skipped.
+Prioritized findings:
+  1. DEMO - Public customer portal | CVE-2026-7001 | risk=90.00 (critical)
+  2. DEMO - Internal analyst workstation | CVE-2026-7002 | risk=22.67 (low)
+  3. DEMO - Internal analyst workstation | CVE-2026-7003 | risk=22.67 (low)
+```
 
 ## Set up and run on Windows PowerShell
 

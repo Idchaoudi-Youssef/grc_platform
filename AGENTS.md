@@ -227,7 +227,7 @@ specialist. Optimize for learning and traceability:
 - Add acknowledgement and treatment-state operations
 - Add optional notification only after local rule behavior is reliable
 
-### M7 - Complete a one-case vertical pipeline
+### M7 - Complete a one-case vertical pipeline (completed)
 
 - Demonstrate one asset, one sanitized/real lab scan, one score, one alert, and one
   remediation action through the API

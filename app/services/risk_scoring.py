@@ -61,6 +61,7 @@ class BulkScoringResult(BaseModel):
     failed_count: int = 0
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    database_failure: bool = False
 
 
 def calculate_risk(
@@ -144,6 +145,7 @@ def score_asset_vulnerabilities(
     *,
     scan_id: int | None = None,
     force: bool = False,
+    commit: bool = True,
 ) -> BulkScoringResult:
     """Score one scan or all findings and commit the changes atomically."""
     result = BulkScoringResult(scan_id=scan_id, force_recalculation=force)
@@ -175,10 +177,14 @@ def score_asset_vulnerabilities(
                 result.failed_count += 1
                 result.errors.append(f"Finding {finding.id} could not be scored: {exc}")
 
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
         return result
     except SQLAlchemyError as exc:
         db.rollback()
+        result.database_failure = True
         result.failed_count = result.examined_count - result.skipped_count
         result.scored_count = 0
         result.errors.append(f"Database scoring failed and was rolled back: {exc}")
