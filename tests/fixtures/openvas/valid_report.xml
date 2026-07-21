@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report id="sanitized-valid-report">
+  <results>
+    <result id="result-1">
+      <host>2001:db8::10</host>
+      <port>443/tcp</port>
+      <name>Outdated TLS service</name>
+      <description>The service uses a version with known security defects.</description>
+      <severity>9.8</severity>
+      <threat>High</threat>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.100001">
+        <solution>Upgrade the service to a supported release.</solution>
+        <refs>
+          <ref type="cve" id="CVE-2024-10001" />
+        </refs>
+      </nvt>
+    </result>
+  </results>
+</report>
+

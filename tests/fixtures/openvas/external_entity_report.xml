@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE report [
+  <!ENTITY external SYSTEM "file:///definitely-not-a-real-sensitive-file">
+]>
+<report>
+  <results>
+    <result>
+      <host>192.0.2.60</host>
+      <name>&external;</name>
+      <severity>5.0</severity>
+    </result>
+  </results>
+</report>
+

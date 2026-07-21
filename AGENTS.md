@@ -200,7 +200,7 @@ specialist. Optimize for learning and traceability:
 - Add focused model/database tests
 - Do not build every API endpoint yet
 
-### M3 - Build and test the OpenVAS XML parser
+### M3 - Build and test the OpenVAS XML parser (completed)
 
 - Add small sanitized XML fixtures
 - Extract host, title, CVSS, zero/one/multiple CVEs, and scan metadata

@@ -34,9 +34,14 @@ app/
   schemas.py    Pydantic input/output validation
   crud.py       Create, read, update, and delete database operations
   main.py       FastAPI application and URL endpoints
+  parsers/
+    openvas.py  Secure OpenVAS XML parsing and normalization
 tests/
   conftest.py   Isolated test database setup
   test_assets.py API and validation tests
+  test_models.py Database model and relationship tests
+  test_openvas_parser.py OpenVAS parser tests
+  fixtures/openvas/ Sanitized XML examples used only by tests
 requirements.txt Python dependencies
 ```
 
@@ -76,6 +81,38 @@ Asset -----------< AssetVulnerability >----------- Vulnerability
 An asset-vulnerability-scan combination can occur only once. SQLite foreign-key
 enforcement prevents findings from referring to records that do not exist, and
 deleting a parent record removes its dependent finding data.
+
+## OpenVAS XML parser
+
+Milestone 3 adds a standalone parser in `app/parsers/openvas.py`. It accepts an
+XML file path, XML bytes, or a readable file-like object and returns three clear
+lists:
+
+- normalized findings that are safe for later processing;
+- warnings for individual incomplete results;
+- fatal errors for reports that could not be parsed safely.
+
+Each normalized finding contains the host, optional port, title, optional
+description, numeric CVSS score, derived severity, CVE list, optional solution,
+optional threat, and optional NVT OID. IPv4 and IPv6 addresses are normalized,
+and valid hostnames are converted to lowercase.
+
+CVE values are extracted from OpenVAS `<cve>` and CVE `<ref>` elements. The
+parser accepts comma-separated values, keeps only identifiers matching the
+`CVE-YYYY-NNNN...` format, converts them to uppercase, removes duplicates, and
+ignores values such as `NOCVE`.
+
+Missing or invalid severity is represented as CVSS `0.0` and informational
+severity, with a warning. A result is skipped only when it lacks a usable host or
+title, or when those values fail validation. Other valid results in the report
+are still returned.
+
+For XML safety, reports containing DTD or entity declarations are rejected
+before Python's standard XML parser runs. External entities are therefore never
+resolved, and the parser performs no network access.
+
+This parser does **not** write to SQLite or use the SQLAlchemy models. Database
+import is deliberately deferred to a later milestone.
 
 ## Set up and run on Windows PowerShell
 

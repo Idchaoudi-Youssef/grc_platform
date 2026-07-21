@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report id="sanitized-imperfect-report">
+  <results>
+    <result id="multiple-cves">
+      <host>app01.example.test</host>
+      <port>8080/tcp</port>
+      <name>Multiple vulnerable components</name>
+      <description>Sanitized finding containing several CVE references.</description>
+      <severity>7.5</severity>
+      <threat>High</threat>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.100002">
+        <cve>CVE-2023-1111, CVE-2023-22222, NOCVE, CVE-2023-1111</cve>
+        <refs>
+          <ref type="cve" id="CVE-2023-22222" />
+          <ref type="url" id="https://example.test/advisory" />
+        </refs>
+      </nvt>
+    </result>
+    <result id="missing-optional-data">
+      <host>192.0.2.40</host>
+      <name>Service information</name>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.100003">
+        <cve>NOCVE</cve>
+      </nvt>
+    </result>
+    <result id="invalid-severity">
+      <host>192.0.2.41</host>
+      <name>Finding with invalid numeric severity</name>
+      <severity>not-a-number</severity>
+    </result>
+    <result id="empty-result" />
+  </results>
+</report>
+
