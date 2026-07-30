@@ -156,6 +156,16 @@ def test_validator_reports_expected_counts():
     assert len(summary.short_findings) == 3
 
 
+def test_validator_distribution_uses_current_greenbone_direct_severity():
+    parsed = parse_openvas(FIXTURES / "current_greenbone_report.xml")
+    summary = summarize_openvas_report(parsed)
+
+    assert summary.findings_count == 2
+    assert summary.unique_hosts == ["192.168.56.105"]
+    assert summary.cvss_distribution["critical"] == 2
+    assert summary.cvss_distribution["informational"] == 0
+
+
 def test_validator_cli_accepts_valid_and_rejects_malformed(capsys):
     assert validate_openvas_report.main([str(FIXTURES / "valid_report.xml")]) == 0
     assert "Usable findings: 1" in capsys.readouterr().out

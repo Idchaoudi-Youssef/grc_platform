@@ -129,9 +129,7 @@ def parse_openvas(
         parsed.errors.append(ParserIssue(message=f"Malformed XML: {exc}"))
         return parsed
 
-    result_elements = [
-        element for element in root.iter() if _local_name(element.tag) == "result"
-    ]
+    result_elements = _find_scan_result_elements(root)
     for index, result_element in enumerate(result_elements, start=1):
         finding = _parse_result_element(result_element, index, parsed.warnings)
         if finding is not None:
@@ -167,8 +165,8 @@ def _parse_result_element(
     result_index: int,
     warnings: list[ParserIssue],
 ) -> ParsedFinding | None:
-    host = _find_text(result_element, "host")
-    title = _find_text(result_element, "name")
+    host = _find_direct_text(result_element, "host")
+    title = _find_direct_text(result_element, "name")
     if not host or not title:
         missing = []
         if not host:
@@ -184,22 +182,22 @@ def _parse_result_element(
         return None
 
     cvss_score = _parse_cvss(
-        _find_text(result_element, "severity"), result_index, warnings
+        _find_direct_text(result_element, "severity"), result_index, warnings
     )
     cve_values = _collect_cve_values(result_element)
-    nvt = _find_element(result_element, "nvt")
+    nvt = _find_direct_element(result_element, "nvt")
 
     try:
         return ParsedFinding(
             host=host,
-            port=_find_text(result_element, "port"),
+            port=_find_direct_text(result_element, "port"),
             title=title,
-            description=_find_text(result_element, "description"),
+            description=_find_direct_text(result_element, "description"),
             cvss_score=cvss_score,
             severity=classify_severity(cvss_score),
             cve_ids=normalize_cve_ids(cve_values),
             solution=_find_text(result_element, "solution"),
-            threat=_find_text(result_element, "threat"),
+            threat=_find_direct_text(result_element, "threat"),
             nvt_oid=nvt.attrib.get("oid", "").strip() or None if nvt is not None else None,
         )
     except ValidationError as exc:
@@ -252,6 +250,38 @@ def _collect_cve_values(result_element: ElementTree.Element) -> list[str]:
             if reference:
                 values.append(reference)
     return values
+
+
+def _find_scan_result_elements(
+    root: ElementTree.Element,
+) -> list[ElementTree.Element]:
+    """Return only findings that are direct children of a results container."""
+    return [
+        child
+        for container in root.iter()
+        if _local_name(container.tag) == "results"
+        for child in list(container)
+        if _local_name(child.tag) == "result"
+    ]
+
+
+def _find_direct_element(
+    parent: ElementTree.Element, local_name: str
+) -> ElementTree.Element | None:
+    """Find one direct child while remaining independent of XML namespaces."""
+    return next(
+        (
+            child
+            for child in list(parent)
+            if _local_name(child.tag) == local_name
+        ),
+        None,
+    )
+
+
+def _find_direct_text(parent: ElementTree.Element, local_name: str) -> str | None:
+    element = _find_direct_element(parent, local_name)
+    return _element_text(element) if element is not None else None
 
 
 def _find_element(

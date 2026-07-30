@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report id="sanitized-current-greenbone-report">
+  <results>
+    <result id="sanitized-critical-1">
+      <name>Critical remote service finding</name>
+      <host>192.168.56.105</host>
+      <port>445/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.200001">
+        <severities>
+          <severity type="cvss_base_v3">
+            <score>10.0</score>
+            <value>CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H</value>
+          </severity>
+        </severities>
+        <solution>Apply the approved security update and verify the service.</solution>
+        <refs>
+          <ref type="cve" id="CVE-2026-10001" />
+        </refs>
+      </nvt>
+      <description>Sanitized evidence for parser regression testing.</description>
+      <threat>High</threat>
+      <severity>10.0</severity>
+      <detection>
+        <result>Product identification metadata, not a scan finding.</result>
+      </detection>
+    </result>
+    <result id="sanitized-critical-2">
+      <name>Critical application component finding</name>
+      <host>192.168.56.105</host>
+      <port>8180/tcp</port>
+      <nvt oid="1.3.6.1.4.1.25623.1.0.200002">
+        <severities>
+          <severity type="cvss_base_v3">
+            <score>9.8</score>
+            <value>CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</value>
+          </severity>
+        </severities>
+        <refs>
+          <ref type="cve" id="CVE-2026-10002" />
+        </refs>
+      </nvt>
+      <description>Short sanitized application finding.</description>
+      <threat>High</threat>
+      <severity>9.8</severity>
+      <detection>
+        <result>Additional detection metadata without a finding host.</result>
+      </detection>
+    </result>
+  </results>
+</report>

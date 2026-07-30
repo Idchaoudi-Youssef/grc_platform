@@ -128,3 +128,23 @@ def test_xml_namespaces_are_supported():
     assert result.findings[0].host == "scanner-target.example.test"
     assert result.findings[0].severity is ParsedSeverity.MEDIUM
     assert result.findings[0].cve_ids == ["CVE-2022-9876"]
+
+
+def test_current_greenbone_structure_uses_direct_finding_severity():
+    result = parse_openvas(FIXTURES / "current_greenbone_report.xml")
+
+    assert result.errors == []
+    assert result.warnings == []
+    assert len(result.findings) == 2
+    assert [finding.cvss_score for finding in result.findings] == [10.0, 9.8]
+    assert all(
+        finding.severity is ParsedSeverity.CRITICAL for finding in result.findings
+    )
+    assert {finding.host for finding in result.findings} == {"192.168.56.105"}
+
+
+def test_nested_detection_results_are_not_parsed_as_findings():
+    result = parse_openvas(FIXTURES / "current_greenbone_report.xml")
+
+    assert len(result.findings) == 2
+    assert not any("missing: host" in issue.message for issue in result.warnings)
