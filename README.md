@@ -45,7 +45,8 @@ app/
     data.py      Shared read-only report snapshot and deterministic rules
     charts.py    Temporary local Matplotlib charts
     executive.py Concise management PDF report
-    technical.py Detailed analyst and audit PDF report
+    technical_summary.py Fixed three-page technical governance summary
+    technical.py Complete analyst/auditor findings appendix
     styles.py    Shared ReportLab typography, tables, and page footer
   lab/
     greenbone_preflight.py Non-destructive Docker, HTTPS, disk, and target checks
@@ -57,7 +58,7 @@ dashboard/
 scripts/
   demo_pipeline.py End-to-end M7 demonstration
   prepare_dashboard_demo.py Safe M8 dashboard data preparation
-  generate_reports.py Read-only executive and technical PDF generation
+  generate_reports.py Read-only generation of all three PDF reports
   check_greenbone_lab.py Manual lab readiness report
   validate_openvas_report.py Secure XML validation without SQLite access
   import_openvas_report.py Dry-run-first use of the existing GRC pipeline
@@ -377,16 +378,35 @@ finding status, and technical severity. The reset button clears all selections.
 All dashboard operations in M8 are read-only: there is no asset editing, XML
 upload, pipeline execution, alert acknowledgement, or treatment update control.
 
-## Executive and technical PDF reports
+## Executive, technical summary, and findings appendix PDFs
 
-Milestone 9 generates two professional reports from an existing SQLite database:
+The reporting command generates three complementary reports from one existing
+SQLite database:
 
 - **Executive report:** a concise management view of posture, KPIs, top open
   priorities, contextual-risk distribution, top risks, and fixed management
-  recommendations.
-- **Technical report:** a detailed analyst/auditor view of scope, methodology,
-  assets, prioritized findings, OpenVAS descriptions and solutions, alerts,
-  treatments, scan information, and limitations.
+  recommendations. It remains exactly one page and labels database-derived
+  counts as normalized relationships.
+- **Technical summary:** an exactly three-page view for an RSSI, security
+  manager, auditor, or technical lead. Page 1 explains scope and posture, page 2
+  lists only the ten highest-priority normalized relationships and recurring
+  themes, and page 3 covers governance and the remediation roadmap. Sensitive
+  descriptions and evidence are deliberately excluded.
+- **Technical findings appendix:** the complete analyst/auditor evidence,
+  including one detailed card for every normalized asset-vulnerability
+  relationship, OpenVAS
+  descriptions and solutions, alerts, treatments, scan information, and
+  limitations. Its page count grows with the number of normalized
+  relationships.
+
+The scanner result count and normalized relationship count are different
+concepts. A single Greenbone result containing multiple CVEs creates multiple
+asset-vulnerability relationships. SQLite currently retains the normalized
+relationship count, not the original scanner result count. Supply the separately
+verified parser count with `--source-finding-count`; the report never attempts to
+reconstruct or guess it from database relationships. If the option is omitted,
+all reports state `Source scanner findings: Not retained in the current
+database`.
 
 ReportLab creates the PDFs, Matplotlib creates two temporary local charts, and
 pypdf verifies report signatures, pages, and extractable text. The chart images
@@ -396,7 +416,7 @@ are removed immediately after embedding. These dependencies are installed with:
 python -m pip install -r requirements.txt
 ```
 
-Prepare the sanitized dashboard database, then generate both reports:
+Prepare the sanitized dashboard database, then generate all three reports:
 
 ```powershell
 python scripts\prepare_dashboard_demo.py
@@ -404,19 +424,29 @@ python scripts\generate_reports.py `
   --database scripts\grc_dashboard_demo.db `
   --output-dir output\pdf `
   --organization "Demo Organization" `
+  --source-finding-count 3 `
   --generation-date "2026-07-21T12:00:00+00:00"
 ```
 
-This creates only:
+This creates:
 
 ```text
 output/pdf/executive_report.pdf
-output/pdf/technical_report.pdf
+output/pdf/technical_summary_report.pdf
+output/pdf/technical_findings_appendix.pdf
 ```
+
+Earlier versions of the CLI produced `technical_report.pdf`. That single large
+file is intentionally split into the concise summary and complete appendix.
+Python callers using `generate_technical_report()` remain supported; the
+explicit `generate_technical_findings_appendix()` name is preferred for new
+code.
 
 Use `--scan-id` to report a specific scan; otherwise the latest scan is selected.
 Use `--title` for a custom common title prefix. Generated PDF directories are
-ignored by Git.
+ignored by Git. For the verified real lab report, use
+`--source-finding-count 62`; its 62 Greenbone source findings normalized into
+108 stored asset-vulnerability relationships.
 
 Report generation is read-only. Database paths are opened using SQLite
 `mode=ro` and `PRAGMA query_only=ON`. The generators never calculate new scores,

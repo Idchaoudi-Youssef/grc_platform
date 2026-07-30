@@ -45,6 +45,7 @@ def generate_executive_report(
     title: str = DEFAULT_TITLE,
     organization: str = DEFAULT_ORGANIZATION,
     generation_date: datetime | None = None,
+    source_finding_count: int | None = None,
 ) -> Path:
     """Generate an executive PDF from one selected scan without database writes."""
     with report_session(source) as db:
@@ -59,11 +60,27 @@ def generate_executive_report(
         top_chart = temp / "top_findings.png"
         risk_distribution_chart(snapshot.risk_distribution, risk_chart)
         top_findings_chart(snapshot.priorities, top_chart)
-        _build_pdf(output, snapshot, risk_chart, top_chart, title, organization)
+        _build_pdf(
+            output,
+            snapshot,
+            risk_chart,
+            top_chart,
+            title,
+            organization,
+            source_finding_count,
+        )
     return output
 
 
-def _build_pdf(output, snapshot, risk_chart, top_chart, title, organization) -> None:
+def _build_pdf(
+    output,
+    snapshot,
+    risk_chart,
+    top_chart,
+    title,
+    organization,
+    source_finding_count,
+) -> None:
     styles = report_styles()
     document = SimpleDocTemplate(
         str(output),
@@ -80,6 +97,10 @@ def _build_pdf(output, snapshot, risk_chart, top_chart, title, organization) -> 
         text_paragraph(title, styles["title"]),
         text_paragraph(organization, styles["subtitle"]),
         _metadata_table(snapshot, styles),
+        text_paragraph(
+            f"Source scanner findings: {_source_count(source_finding_count)}",
+            styles["small"],
+        ),
         Spacer(1, 2 * mm),
         _posture_banner(snapshot.posture, styles),
         text_paragraph("Executive posture summary", styles["h1"]),
@@ -91,6 +112,10 @@ def _build_pdf(output, snapshot, risk_chart, top_chart, title, organization) -> 
             [[Image(str(risk_chart), width=86 * mm, height=37 * mm), Image(str(top_chart), width=86 * mm, height=37 * mm)]],
             colWidths=[88 * mm, 88 * mm],
             style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]),
+        ),
+        text_paragraph(
+            "Chart counts represent normalized relationships, not source scanner findings.",
+            styles["small"],
         ),
         text_paragraph("Management recommendations", styles["h1"]),
     ]
@@ -123,7 +148,7 @@ def _kpi_table(snapshot, styles):
     kpis = snapshot.kpis
     values = [
         (kpis.total_assets, "Assets in selected scan"),
-        (kpis.total_relationships, "Imported findings"),
+        (kpis.total_relationships, "Normalized relationships"),
         ("Not scored" if kpis.average_contextual_risk is None else f"{kpis.average_contextual_risk:.2f}", "Average contextual risk"),
         (snapshot.risk_distribution["critical"], "Critical contextual risks"),
         (snapshot.risk_distribution["high"], "High contextual risks"),
@@ -158,7 +183,7 @@ def _priority_table(snapshot, styles):
             text_paragraph(action, styles["table"]),
         ])
     if len(rows) == 1:
-        rows.append([text_paragraph("No open findings for this scan.", styles["table"]), "", "", "", "", ""])
+        rows.append([text_paragraph("No open normalized relationships for this scan.", styles["table"]), "", "", "", "", ""])
     table = Table(rows, colWidths=[29 * mm, 27 * mm, 41 * mm, 14 * mm, 25 * mm, 40 * mm], repeatRows=1)
     table.setStyle(standard_table_style(compact=True))
     return table
@@ -181,3 +206,7 @@ def _format_score(value) -> str:
 
 def _shorten(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[: limit - 3] + "..."
+
+
+def _source_count(value: int | None) -> str:
+    return str(value) if value is not None else "Not retained in the current database"

@@ -28,6 +28,7 @@ from app.reports.styles import (
 )
 
 DEFAULT_TITLE = "Technical Vulnerability and Treatment Report"
+APPENDIX_TITLE = "Technical Findings Appendix"
 DEFAULT_ORGANIZATION = "Demonstration Organization"
 
 
@@ -39,6 +40,7 @@ def generate_technical_report(
     title: str = DEFAULT_TITLE,
     organization: str = DEFAULT_ORGANIZATION,
     generation_date: datetime | None = None,
+    source_finding_count: int | None = None,
 ) -> Path:
     """Generate a detailed PDF from one selected scan without database writes."""
     with report_session(source) as db:
@@ -46,17 +48,43 @@ def generate_technical_report(
             db, scan_id=scan_id, generation_date=generation_date
         )
     output = _prepare_output(output_path)
-    _build_pdf(output, snapshot, title, organization)
+    _build_pdf(output, snapshot, title, organization, source_finding_count)
     return output
 
 
-def _build_pdf(output, snapshot, title, organization) -> None:
+def generate_technical_findings_appendix(
+    source,
+    output_path: str | Path,
+    *,
+    scan_id: int | None = None,
+    title: str = APPENDIX_TITLE,
+    organization: str = DEFAULT_ORGANIZATION,
+    generation_date: datetime | None = None,
+    source_finding_count: int | None = None,
+) -> Path:
+    """Generate the complete normalized-relationship appendix.
+
+    ``generate_technical_report`` remains available for backwards-compatible
+    library callers. The CLI uses this explicitly named wrapper.
+    """
+    return generate_technical_report(
+        source,
+        output_path,
+        scan_id=scan_id,
+        title=title,
+        organization=organization,
+        generation_date=generation_date,
+        source_finding_count=source_finding_count,
+    )
+
+
+def _build_pdf(output, snapshot, title, organization, source_finding_count) -> None:
     styles = report_styles()
     document = SimpleDocTemplate(
         str(output), pagesize=landscape(A4), leftMargin=14 * mm,
         rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=17 * mm,
         title=title, author=organization,
-        subject="Technical GRC findings, alerts, and treatments",
+        subject="Technical GRC normalized relationships, alerts, and treatments",
     )
     story = [
         text_paragraph(title, styles["title"]),
@@ -64,7 +92,15 @@ def _build_pdf(output, snapshot, title, organization) -> None:
         _metadata(snapshot, styles),
         text_paragraph("Scope and methodology", styles["h1"]),
         text_paragraph(
-            "This report reflects OpenVAS findings imported for the selected scan. CVSS represents technical severity. Contextual business risk combines CVSS, asset criticality, and exposure using: risk = (CVSS x criticality x exposure factor / 75) x 100. Exposure factors are internal = 1.0 and external = 1.5. Thresholds are low 0-24.99, medium 25-49.99, high 50-74.99, and critical 75-100.",
+            f"Source scanner findings: {_source_count(source_finding_count)}. "
+            f"This appendix contains all {len(snapshot.findings)} normalized "
+            "asset-vulnerability relationships for the selected scan. One source "
+            "finding can produce several relationships when it contains multiple "
+            "CVE identifiers. CVSS represents technical severity. Contextual business "
+            "risk combines CVSS, asset criticality, and exposure using: risk = "
+            "(CVSS x criticality x exposure factor / 75) x 100. Exposure factors are "
+            "internal = 1.0 and external = 1.5. Thresholds are low 0-24.99, medium "
+            "25-49.99, high 50-74.99, and critical 75-100.",
             styles["body"],
         ),
         text_paragraph(
@@ -73,7 +109,7 @@ def _build_pdf(output, snapshot, title, organization) -> None:
         ),
         text_paragraph("Asset inventory summary", styles["h1"]),
         _asset_table(snapshot, styles),
-        text_paragraph("Detailed prioritized findings", styles["h1"]),
+        text_paragraph("Detailed normalized relationships", styles["h1"]),
     ]
     for position, finding in enumerate(snapshot.findings, start=1):
         story.extend(_finding_card(position, finding, snapshot, styles))
@@ -84,7 +120,7 @@ def _build_pdf(output, snapshot, title, organization) -> None:
             _alerts_table(snapshot, styles),
             text_paragraph("Treatment plan", styles["h1"]),
             _treatments_table(snapshot, styles),
-            text_paragraph("Scan information", styles["h1"]),
+            text_paragraph("Normalized relationship scan information", styles["h1"]),
             _scan_table(snapshot, styles),
             text_paragraph("Limitations", styles["h1"]),
         ]
@@ -103,7 +139,7 @@ def _build_pdf(output, snapshot, title, organization) -> None:
 def _metadata(snapshot, styles):
     rows = [
         ["Generated", snapshot.generation_date.strftime("%Y-%m-%d %H:%M UTC"), "Selected scan", snapshot.scan.scan_date.strftime("%Y-%m-%d %H:%M UTC"), "Source", snapshot.scan.source],
-        ["Scan ID", snapshot.scan.id, "Imported relationships", len(snapshot.findings), "Overall posture", snapshot.posture],
+        ["Scan ID", snapshot.scan.id, "Normalized relationships", len(snapshot.findings), "Overall posture", snapshot.posture],
     ]
     converted = [[text_paragraph(value, styles["small"]) for value in row] for row in rows]
     table = Table(converted, colWidths=[24 * mm, 52 * mm, 33 * mm, 48 * mm, 28 * mm, 65 * mm])
@@ -130,7 +166,7 @@ def _finding_card(position, finding, snapshot, styles):
     rows = [
         ["Asset", finding["asset_name"], "IP", finding["ip_address"], "Scan date", _date_time(finding["scan_date"])],
         ["Identity", finding["vulnerability"], "CVSS", f"{float(finding['cvss']):.1f}", "Technical severity", finding["technical_severity"]],
-        ["Contextual risk", score, "Risk level", finding["contextual_risk_level"] or "unscored", "Finding status", finding["workflow_status"]],
+        ["Contextual risk", score, "Risk level", finding["contextual_risk_level"] or "unscored", "Relationship status", finding["workflow_status"]],
         ["Asset criticality", finding["business_criticality"], "Exposure", finding["exposure"], "Asset owner", finding["asset_owner"]],
         ["Alert status", "None" if alert is None else ("Acknowledged" if alert["acknowledged"] else "Unacknowledged"), "Treatment owner", treatment["owner"] if treatment else "Unassigned", "Treatment status", treatment["status"] if treatment else "Not created"],
         ["Due date", _date(treatment["due_date"]) if treatment else "Not set", "Overdue", "Yes" if treatment and treatment["overdue"] else "No", "Auto-created", "Yes" if treatment and treatment["auto_created"] else "No"],
@@ -187,7 +223,7 @@ def _scan_table(snapshot, styles):
     distribution = snapshot.risk_distribution
     average = "Not scored" if snapshot.kpis.average_contextual_risk is None else f"{snapshot.kpis.average_contextual_risk:.2f}"
     rows = [
-        ["Scan ID", "Scan date", "Source", "Imported", "Low", "Medium", "High", "Critical", "Unscored", "Average risk"],
+        ["Scan ID", "Scan date", "Source", "Normalized relationships", "Contextual low", "Contextual medium", "Contextual high", "Contextual critical", "Unscored", "Average risk"],
         [snapshot.scan.id, _date_time(snapshot.scan.scan_date), snapshot.scan.source, len(snapshot.findings), distribution["low"], distribution["medium"], distribution["high"], distribution["critical"], distribution["unscored"], average],
     ]
     converted = [[text_paragraph(value, styles["table_header"] if row_index == 0 else styles["table"]) for value in row] for row_index, row in enumerate(rows)]
@@ -220,3 +256,7 @@ def _shorten(value, limit: int) -> str:
         return "Not available"
     text = str(value)
     return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def _source_count(value: int | None) -> str:
+    return str(value) if value is not None else "Not retained in the current database"
