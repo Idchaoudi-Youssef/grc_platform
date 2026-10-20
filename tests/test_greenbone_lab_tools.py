@@ -161,7 +161,7 @@ def test_validator_distribution_uses_current_greenbone_direct_severity():
     summary = summarize_openvas_report(parsed)
 
     assert summary.findings_count == 2
-    assert summary.unique_hosts == ["192.168.56.105"]
+    assert summary.unique_hosts == ["192.0.2.105"]
     assert summary.cvss_distribution["critical"] == 2
     assert summary.cvss_distribution["informational"] == 0
 

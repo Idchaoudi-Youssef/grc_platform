@@ -140,7 +140,7 @@ def test_current_greenbone_structure_uses_direct_finding_severity():
     assert all(
         finding.severity is ParsedSeverity.CRITICAL for finding in result.findings
     )
-    assert {finding.host for finding in result.findings} == {"192.168.56.105"}
+    assert {finding.host for finding in result.findings} == {"192.0.2.105"}
 
 
 def test_nested_detection_results_are_not_parsed_as_findings():

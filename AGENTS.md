@@ -209,7 +209,7 @@ specialist. Optimize for learning and traceability:
 
 ### M4 - Import one scan end to end (completed)
 
-- Add an import service and a simple XML upload endpoint
+- Add an import service driven by the CLI scripts (no HTTP upload endpoint yet)
 - Store the scan and findings and link findings to assets by normalized IP
 - Report unknown hosts instead of silently dropping them
 - Make re-import behavior explicit and idempotent
@@ -218,13 +218,15 @@ specialist. Optimize for learning and traceability:
 
 - Define normalization and Low/Medium/High/Critical thresholds precisely
 - Calculate and store risk on `AssetVulnerability`
-- Add boundary-focused unit tests and prioritized result endpoints
+- Add boundary-focused unit tests and prioritized ordering in the services,
+  dashboard, and reports (no HTTP result endpoint yet)
 
 ### M6 - Implement rule-based detection and remediation (completed)
 
 - Evaluate findings after import/scoring
 - Create idempotent critical alerts and automatically generated treatments
-- Add acknowledgement and treatment-state operations
+- Keep alert acknowledgement and treatment state in the database; exposing
+  write endpoints for them is not implemented yet
 - Add optional notification only after local rule behavior is reliable
 
 ### M7 - Complete a one-case vertical pipeline (completed)

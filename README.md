@@ -1,511 +1,74 @@
 # GRC Vulnerability Management Platform
 
-This educational platform tracks an **asset inventory**, imports sanitized
-OpenVAS results, calculates contextual business risk, creates rule-based alerts
-and remediation tasks, and displays the stored GRC posture in a small read-only
-dashboard. It deliberately contains no authentication, Docker, PostgreSQL, or
-direct scanner connection yet.
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![Stack](https://img.shields.io/badge/stack-FastAPI%20|%20SQLAlchemy%20|%20SQLite%20|%20Streamlit-informational)
 
-## What is included
+> A scanner tells you what is broken. A GRC platform tells you **what to fix first**.
 
-- **FastAPI** receives HTTP requests and returns JSON responses.
-- **Pydantic** checks incoming data before it reaches the database.
-- **SQLAlchemy** translates Python operations into database queries.
-- **SQLite** stores data locally in `grc.db` without a separate database server.
-- **pytest** automatically checks the API's expected and invalid-data behavior.
-- **Streamlit** displays a small read-only dashboard from existing SQLite data.
+OpenVAS gives you a list of CVSS numbers. That list is not a plan. This project
+turns a raw scan export into a prioritized remediation backlog by combining
+technical severity with **business context**: how critical the asset is and
+whether it is exposed to the internet.
 
-Each asset has a name, a unique IPv4 or IPv6 address, an asset type, an owner,
-business criticality from 1 (lowest) to 5 (highest), exposure of `internal` or
-`external`, and an optional description. Timestamps are managed automatically.
-
-Asset type uses a controlled list so that reports do not accidentally treat
-values such as `server`, `Server`, and `srv` as three different categories. The
-accepted values are `server`, `workstation`, `network_device`, `application`,
-`database`, and `other`. The owner is the person or team responsible for the
-asset.
-
-## Project structure
-
-```text
-app/
-  database.py   SQLite connection and request sessions
-  models.py     SQLAlchemy tables and relationships
-  schemas.py    Pydantic input/output validation
-  crud.py       Create, read, update, and delete database operations
-  main.py       FastAPI application and URL endpoints
-  parsers/
-    openvas.py  Secure OpenVAS XML parsing and normalization
-  services/
-    openvas_import.py Transactional storage of normalized findings
-    risk_scoring.py Contextual GRC risk calculation and bulk scoring
-    detection_remediation.py Rule-based alerts and automatic treatment tasks
-    grc_pipeline.py Atomic end-to-end workflow orchestration
-  reports/
-    data.py      Shared read-only report snapshot and deterministic rules
-    charts.py    Temporary local Matplotlib charts
-    executive.py Concise management PDF report
-    technical_summary.py Fixed three-page technical governance summary
-    technical.py Complete analyst/auditor findings appendix
-    styles.py    Shared ReportLab typography, tables, and page footer
-  lab/
-    greenbone_preflight.py Non-destructive Docker, HTTPS, disk, and target checks
-    report_validation.py Read-only normalized XML summaries
-    report_import.py Safe dry-run or explicitly confirmed pipeline import
-dashboard/
-  streamlit_app.py Read-only Streamlit interface
-  data.py       Tested queries, filters, and aggregations
-scripts/
-  demo_pipeline.py End-to-end M7 demonstration
-  prepare_dashboard_demo.py Safe M8 dashboard data preparation
-  generate_reports.py Read-only generation of all three PDF reports
-  check_greenbone_lab.py Manual lab readiness report
-  validate_openvas_report.py Secure XML validation without SQLite access
-  import_openvas_report.py Dry-run-first use of the existing GRC pipeline
-tests/
-  conftest.py   Isolated test database setup
-  test_assets.py API and validation tests
-  test_models.py Database model and relationship tests
-  test_openvas_parser.py OpenVAS parser tests
-  test_openvas_import.py OpenVAS database import tests
-  test_risk_scoring.py Contextual scoring tests
-  test_detection_remediation.py Detection and task-creation tests
-  test_dashboard_data.py Read-only query and aggregation tests
-  test_reports.py PDF data, generation, extraction, and integrity tests
-  fixtures/openvas/ Sanitized XML examples used only by tests
-requirements.txt Python dependencies
+```
+  Asset inventory
+        │
+        ▼
+  OpenVAS XML export ──► secure parser ──► transactional import
+        │                                        │
+        │                                        ▼
+        │                          contextual risk scoring
+        │                       (CVSS × criticality × exposure)
+        │                                        │
+        │                                        ▼
+        │                            rule-based detection
+        │                                        │
+        │                                        ▼
+        │                      critical alert + remediation task
+        │                                        │
+        ▼                                        ▼
+     SQLite  ◄──────────────────────────►  Streamlit dashboard
+                                                │
+                                                ▼
+                                executive + technical PDF reports
 ```
 
-## Core data model
+---
 
-Milestone 2 adds the database foundation needed for later OpenVAS imports. It
-does not add API endpoints or import logic yet.
+## Why contextual risk?
 
-- **Asset** is a system, application, database, or device that the organization
-  needs to protect.
-- **Scan** records when a scan happened, where it came from, and its finding
-  total. Keeping separate scans makes historical trends possible later.
-- **Vulnerability** describes the technical weakness, including its optional CVE,
-  CVSS score, severity, and source. A CVE is optional because OpenVAS can report
-  findings that do not have one.
-- **AssetVulnerability** records that one vulnerability was observed on one asset
-  in one scan. Its workflow status and future contextual risk score belong here,
-  because the same vulnerability can have different business risk on different
-  assets.
-- **RiskTreatment** records a remediation decision or action, its owner, due date,
-  status, evidence, and whether it was generated automatically.
-- **Alert** records a noteworthy finding and whether someone has acknowledged it.
+The same CVE means different things on different machines. A CVSS 9.8 on an
+isolated analyst workstation is not the same problem as a CVSS 9.8 on an
+internet-facing payment server.
 
-The relationships are:
-
-```text
-Asset -----------< AssetVulnerability >----------- Vulnerability
-                           ^
-                           |
-                         Scan
-                           |
-                           +--------< RiskTreatment
-                           |
-                           +--------< Alert
+```
+raw  = CVSS × business_criticality × exposure_factor
+risk = (raw / 75) × 100        # 75 = 10 × 5 × 1.5 (theoretical max)
 ```
 
-An asset-vulnerability-scan combination can occur only once. SQLite foreign-key
-enforcement prevents findings from referring to records that do not exist, and
-deleting a parent record removes its dependent finding data.
-
-## OpenVAS XML parser
-
-Milestone 3 adds a standalone parser in `app/parsers/openvas.py`. It accepts an
-XML file path, XML bytes, or a readable file-like object and returns three clear
-lists:
-
-- normalized findings that are safe for later processing;
-- warnings for individual incomplete results;
-- fatal errors for reports that could not be parsed safely.
-
-Each normalized finding contains the host, optional port, title, optional
-description, numeric CVSS score, derived severity, CVE list, optional solution,
-optional threat, and optional NVT OID. IPv4 and IPv6 addresses are normalized,
-and valid hostnames are converted to lowercase.
-
-CVE values are extracted from OpenVAS `<cve>` and CVE `<ref>` elements. The
-parser accepts comma-separated values, keeps only identifiers matching the
-`CVE-YYYY-NNNN...` format, converts them to uppercase, removes duplicates, and
-ignores values such as `NOCVE`.
-
-Missing or invalid severity is represented as CVSS `0.0` and informational
-severity, with a warning. A result is skipped only when it lacks a usable host or
-title, or when those values fail validation. Other valid results in the report
-are still returned.
-
-For XML safety, reports containing DTD or entity declarations are rejected
-before Python's standard XML parser runs. External entities are therefore never
-resolved, and the parser performs no network access.
-
-This parser does **not** write to SQLite or use the SQLAlchemy models. Database
-import is deliberately deferred to a later milestone.
-
-## OpenVAS database import
-
-Milestone 4 adds a service in `app/services/openvas_import.py` that accepts an
-M3 parse result and a SQLAlchemy session. It performs one atomic database
-transaction using this sequence:
-
-1. Reject a parser result that has fatal XML errors and no valid findings.
-2. Create one `Scan` record, with source `openvas` unless another source is
-   supplied explicitly.
-3. Match each finding to an existing asset by its normalized IP address. Unknown
-   assets are reported and skipped; the importer never creates assets.
-4. Create or reuse vulnerabilities using the identity rules below.
-5. Create one unique `AssetVulnerability` relationship for each asset,
-   vulnerability, and scan combination.
-6. Commit everything together. A database error rolls back the scan and every
-   related record created during that import.
-
-For findings containing CVEs, each CVE represents one vulnerability. The same
-CVE and source reuse the existing vulnerability record. For a finding without a
-CVE, the importer uses `nvt:<OID>` when the NVT OID is present. Otherwise, it
-creates a deterministic SHA-256 fingerprint from the normalized title, port,
-description, solution, and threat. This stable `technical_id` avoids treating a
-title alone as identity.
-
-When an existing vulnerability is reused, its original title, description,
-CVSS score, severity, and initial detection time are preserved. Conflicting
-incoming metadata is reported as a warning instead of silently overwriting the
-trusted record.
-
-Duplicate findings for the same asset and vulnerability inside one scan are
-ignored with a warning. Importing the same report again creates a new scan and
-new scan-specific relationships, while reusing the vulnerability records.
-`first_seen_at` and `last_seen_at` both use that scan's date for now, and
-`risk_score` remains null. The scan total records the number of successfully
-imported unique `AssetVulnerability` relationships. Therefore, a finding with
-multiple CVEs contributes one relationship—and one unit in the scan total—for
-each imported CVE.
-
-Every vulnerability must have a stable identity: either `cve_id` or
-`technical_id` must be present. SQLite enforces this rule with a check
-constraint, even when records are created outside the importer.
-
-The import result reports created/reused vulnerabilities, imported
-relationships, skipped findings, unknown assets, warnings, and errors. M4 does
-not calculate risk and does not create alerts or treatment actions.
-
-## Contextual GRC risk scoring
-
-Milestone 5 translates technical CVSS severity into business context. The exact
-formula is:
-
-```text
-raw score = CVSS × business criticality × exposure factor
-risk score = (raw score / 75) × 100
-```
-
-The denominator is `75` because the theoretical maximum is `10 × 5 × 1.5`.
-Internal exposure uses factor `1.0`; external exposure uses `1.5`. The final
-score is clamped to 0–100 and rounded to two decimal places before it is stored
-on `AssetVulnerability`.
-
-Contextual risk levels are:
+`exposure_factor` is `1.0` internal and `1.5` external. Scores are clamped to
+0–100 and rounded to two decimals.
 
 | Stored score | Risk level |
 |---|---|
-| 0.00–24.99 | Low |
-| 25.00–49.99 | Medium |
-| 50.00–74.99 | High |
-| 75.00–100.00 | Critical |
+| 0.00 – 24.99 | Low |
+| 25.00 – 49.99 | Medium |
+| 50.00 – 74.99 | High |
+| 75.00 – 100.00 | Critical |
 
-Examples:
+The risk score lives on the **asset–vulnerability relationship**, never on the
+vulnerability itself, because the same flaw carries different business weight
+on different assets.
 
-1. An external critical server with CVSS `9.0` and criticality `5` has raw score
-   `9.0 × 5 × 1.5 = 67.5`, normalized score `90.00`, and **critical** risk.
-2. An internal workstation with CVSS `8.5` and criticality `2` has raw score
-   `17`, normalized score `22.67`, and **low** risk.
-3. An internal database with CVSS `7.5` and criticality `5` has raw score `37.5`,
-   normalized score `50.00`, and **high** risk.
+**Detection rule** `critical_contextual_risk_v1` fires when a finding scores
+≥ 75.00 on an asset with criticality ≥ 4 and is not already fixed. It creates a
+critical alert and a tracked remediation task owned by the asset owner, due in
+7 days.
 
-The pure calculation function does not use the database. A one-finding service
-assigns a score without committing, while the bulk service scores either one
-scan or all findings in a single transaction. By default, already scored records
-are skipped; `force=True` recalculates them. An invalid individual record is
-reported without blocking other valid records. A fatal database error rolls back
-every score from that bulk operation.
+---
 
-OpenVAS `Vulnerability.severity` remains the scanner's technical classification.
-The M5 `RiskLevel` is a separate contextual business-risk classification. M5
-does not create alerts or remediation treatments.
-
-## Rule-based detection and automated remediation
-
-Milestone 6 applies one transparent application-level correlation rule to scored
-findings. The stable rule key is `critical_contextual_risk_v1`. It matches only
-when all these conditions are true:
-
-- contextual `risk_score` is at least `75.00`;
-- asset business criticality is at least `4`;
-- finding status is not `fixed`;
-- the contextual score is not null.
-
-When the rule matches, the service creates a critical, unacknowledged alert. Its
-message contains the asset name and IP, vulnerability title, CVE or technical
-identity, and contextual score. It also creates a pending automatic treatment
-owned by the asset owner and due seven days after evaluation. The OpenVAS
-solution is used when available; otherwise the task recommends reviewing the
-service, applying the vendor patch or mitigation, validating the correction, and
-scanning again.
-
-Example: an open finding with score `90.00` on a criticality-5 server matches the
-rule. The application creates one critical alert and one pending remediation task
-due in seven days. It does **not** run a patch command, change the affected
-system, isolate the asset, send email, or perform any network action. In this
-project, “automated remediation” means automatically creating a tracked GRC task.
-
-Both alerts and treatments have an optional `rule_key`. Manual records use a
-null key. Database uniqueness on `(asset_vulnerability_id, rule_key)` prevents
-duplicate automatic records, while repeated runs reuse the existing records and
-can repair partial state where only the alert or only the treatment exists.
-
-The one-record service flushes but does not commit. The bulk service processes
-one scan or all scored findings and commits once. A validation problem on one
-finding is reported without blocking the others; a fatal database error rolls
-back the complete bulk operation.
-
-## Complete demonstration pipeline
-
-Milestone 7 connects the existing services in this exact order:
-
-```text
-OpenVAS XML -> secure parse -> database import -> contextual scoring
-            -> critical-risk detection -> alert and remediation task
-```
-
-The orchestrator calls the importer, scorer, and detection service without
-allowing them to commit independently. It performs one final commit after every
-stage succeeds. A fatal database failure during scoring, detection, or the final
-commit rolls back the imported scan and all related records. Expected conditions
-such as an unknown asset remain warnings and do not block valid findings.
-
-Run the standalone demonstration from the project directory:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\demo_pipeline.py
-```
-
-The script does not start a web server and does not require Greenbone/OpenVAS. It
-uses the sanitized M7 XML fixture and creates two assets labeled as demonstration
-data. It deletes and recreates only `scripts/grc_pipeline_demo.db`; it never
-deletes or connects to the normal `grc.db`. Running it repeatedly is safe.
-
-Example output:
-
-```text
-=== GRC PIPELINE DEMONSTRATION ===
-Data label: DEMONSTRATION DATA ONLY
-Pipeline success: True
-Scan ID: 1
-Parsed findings: 3
-Findings imported: 3
-Vulnerabilities scored: 3
-Alerts created: 1
-Treatments created: 1
-Warnings:
-  - Missing severity defaulted to 0.0 for the unknown demonstration host.
-  - Unknown asset 192.0.2.72 was skipped.
-Prioritized findings:
-  1. DEMO - Public customer portal | CVE-2026-7001 | risk=90.00 (critical)
-  2. DEMO - Internal analyst workstation | CVE-2026-7002 | risk=22.67 (low)
-  3. DEMO - Internal analyst workstation | CVE-2026-7003 | risk=22.67 (low)
-```
-
-## Read-only Streamlit dashboard
-
-Milestone 8 visualizes data that is already stored in SQLite. Streamlit is the
-only new direct dependency and is installed with the normal requirements:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-```
-
-Prepare the dedicated sanitized dashboard database:
-
-```powershell
-python scripts\prepare_dashboard_demo.py
-```
-
-The script safely recreates only `scripts/grc_dashboard_demo.db`. It never opens,
-deletes, or modifies the normal `grc.db`, and generated `*.db` files are ignored
-by Git. Its data includes four assets, two scans, every contextual risk level,
-mixed alert acknowledgement, and pending, in-progress, completed, and overdue
-treatment examples.
-
-Start the dashboard with the normal `grc.db` selected by default:
-
-```powershell
-streamlit run dashboard\streamlit_app.py
-```
-
-To start with the demonstration database selected, set the optional environment
-variable for the current PowerShell session:
-
-```powershell
-$env:GRC_DASHBOARD_DB = (Resolve-Path .\scripts\grc_dashboard_demo.db).Path
-streamlit run dashboard\streamlit_app.py
-```
-
-You can also paste a database path into the dashboard sidebar. The selected file
-must already exist and contain the expected tables. The dashboard opens it with
-SQLite `mode=ro` and `PRAGMA query_only=ON`; it cannot create, reset, or modify
-records.
-
-The dashboard contains:
-
-- **Executive overview:** assets, scans, findings, critical risks, alerts,
-  treatments, completion rate, average risk, overdue work, and latest scan.
-- **Risks by contextual level:** low, medium, high, and critical counts, with an
-  explicit separate count for unscored findings.
-- **Technical severity versus contextual risk:** shows scanner CVSS/severity next
-  to the M5 business-context score and level.
-- **Prioritized findings and top risky assets:** sorts risks by score and groups
-  asset exposure.
-- **Alerts and remediation treatments:** shows acknowledgement, ownership,
-  deadlines, workflow status, automatic creation, and overdue state.
-- **Scan history:** shows import counts, average risk, critical counts, alerts,
-  and a trend chart when at least two scans are visible.
-
-Sidebar filters cover scan, asset, asset type, exposure, contextual risk level,
-finding status, and technical severity. The reset button clears all selections.
-All dashboard operations in M8 are read-only: there is no asset editing, XML
-upload, pipeline execution, alert acknowledgement, or treatment update control.
-
-## Executive, technical summary, and findings appendix PDFs
-
-The reporting command generates three complementary reports from one existing
-SQLite database:
-
-- **Executive report:** a concise management view of posture, KPIs, top open
-  priorities, contextual-risk distribution, top risks, and fixed management
-  recommendations. It remains exactly one page and labels database-derived
-  counts as normalized relationships.
-- **Technical summary:** an exactly three-page view for an RSSI, security
-  manager, auditor, or technical lead. Page 1 explains scope and posture, page 2
-  lists only the ten highest-priority normalized relationships and recurring
-  themes, and page 3 covers governance and the remediation roadmap. Sensitive
-  descriptions and evidence are deliberately excluded.
-- **Technical findings appendix:** the complete analyst/auditor evidence,
-  including one detailed card for every normalized asset-vulnerability
-  relationship, OpenVAS
-  descriptions and solutions, alerts, treatments, scan information, and
-  limitations. Its page count grows with the number of normalized
-  relationships.
-
-The scanner result count and normalized relationship count are different
-concepts. A single Greenbone result containing multiple CVEs creates multiple
-asset-vulnerability relationships. SQLite currently retains the normalized
-relationship count, not the original scanner result count. Supply the separately
-verified parser count with `--source-finding-count`; the report never attempts to
-reconstruct or guess it from database relationships. If the option is omitted,
-all reports state `Source scanner findings: Not retained in the current
-database`.
-
-ReportLab creates the PDFs, Matplotlib creates two temporary local charts, and
-pypdf verifies report signatures, pages, and extractable text. The chart images
-are removed immediately after embedding. These dependencies are installed with:
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-Prepare the sanitized dashboard database, then generate all three reports:
-
-```powershell
-python scripts\prepare_dashboard_demo.py
-python scripts\generate_reports.py `
-  --database scripts\grc_dashboard_demo.db `
-  --output-dir output\pdf `
-  --organization "Demo Organization" `
-  --source-finding-count 3 `
-  --generation-date "2026-07-21T12:00:00+00:00"
-```
-
-This creates:
-
-```text
-output/pdf/executive_report.pdf
-output/pdf/technical_summary_report.pdf
-output/pdf/technical_findings_appendix.pdf
-```
-
-Earlier versions of the CLI produced `technical_report.pdf`. That single large
-file is intentionally split into the concise summary and complete appendix.
-Python callers using `generate_technical_report()` remain supported; the
-explicit `generate_technical_findings_appendix()` name is preferred for new
-code.
-
-Use `--scan-id` to report a specific scan; otherwise the latest scan is selected.
-Use `--title` for a custom common title prefix. Generated PDF directories are
-ignored by Git. For the verified real lab report, use
-`--source-finding-count 62`; its 62 Greenbone source findings normalized into
-108 stored asset-vulnerability relationships.
-
-Report generation is read-only. Database paths are opened using SQLite
-`mode=ro` and `PRAGMA query_only=ON`. The generators never calculate new scores,
-create alerts or treatments, acknowledge records, or commit database changes.
-The reports clearly distinguish OpenVAS technical severity from contextual
-business risk and state that automated remediation means tracked task creation,
-not automatic patching.
-
-## Manual Greenbone/OpenVAS lab (M10A)
-
-M10A prepares a reproducible **educational lab integration** without controlling
-Greenbone. It does not install containers, create targets, start scans, use GMP,
-or scan third-party systems. Greenbone remains a separately managed scanner;
-this application receives a manually exported XML report.
-
-Start with the [Greenbone lab setup](docs/lab/greenbone_setup.md) and use the
-[authorized scan checklist](docs/lab/real_scan_checklist.md). The setup links to
-Greenbone's latest official Compose download; the Compose file and local lab
-credentials are not stored in this repository.
-
-Non-destructive readiness check:
-
-```powershell
-python scripts\check_greenbone_lab.py --help
-```
-
-Validate a private XML export with the secure M3 parser and no database access:
-
-```powershell
-python scripts\validate_openvas_report.py C:\private-scans\report.xml --show-first-five
-```
-
-Dry-run the complete existing pipeline against a temporary copy of an existing
-database. This is the default and leaves the selected database unchanged:
-
-```powershell
-python scripts\import_openvas_report.py C:\private-scans\report.xml `
-  --database .\grc.db
-```
-
-After reviewing the dry-run result, a separately approved real import requires
-the explicit flag:
-
-```powershell
-python scripts\import_openvas_report.py C:\private-scans\report.xml `
-  --database .\grc.db `
-  --confirm-import
-```
-
-The confirmed path reuses the M7 parser/import/scoring/detection pipeline and its
-single final commit. It never creates a Greenbone scan or target and never sends
-email/webhooks, patches a host, or runs an external remediation command. Manual
-XML exchange is the M10A boundary; Greenbone Management Protocol/API automation
-is deferred to a later, separately approved milestone.
-
-## Set up and run on Windows PowerShell
-
-The `.venv` virtual environment keeps this project's Python packages separate
-from packages installed elsewhere on your computer.
+## Quick start
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -513,24 +76,33 @@ python -m pip install -r requirements.txt
 python -m uvicorn app.main:app --reload
 ```
 
-Open <http://127.0.0.1:8000/docs> for FastAPI's interactive API page. You can
-create and inspect assets there without writing a separate client. Use
-<http://127.0.0.1:8000/health> for a simple availability check.
+Interactive API docs → <http://127.0.0.1:8000/docs> · health check → `/health`
 
-Stop the server with `Ctrl+C`.
+Run the full pipeline with no server and no scanner:
 
-## API endpoints
+```powershell
+python scripts\demo_pipeline.py
+```
+
+Launch the read-only dashboard:
+
+```powershell
+python scripts\prepare_dashboard_demo.py
+streamlit run dashboard\streamlit_app.py
+```
+
+---
+
+## API
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health` | Check that the API is running |
+| `GET` | `/health` | Availability check |
 | `POST` | `/assets` | Create an asset |
-| `GET` | `/assets` | List all assets |
+| `GET` | `/assets` | List assets |
 | `GET` | `/assets/{id}` | Read one asset |
 | `PATCH` | `/assets/{id}` | Update selected fields |
 | `DELETE` | `/assets/{id}` | Delete an asset |
-
-Example body for `POST /assets`:
 
 ```json
 {
@@ -544,37 +116,122 @@ Example body for `POST /assets`:
 }
 ```
 
-Example partial update for `PATCH /assets/1`:
+Invalid IP, blank owner, unsupported asset type, criticality outside 1–5, or
+bad exposure → `422`. Duplicate IP → `409`. Missing asset → `404`.
 
-```json
-{
-  "owner": "SOC Team",
-  "asset_type": "application"
-}
+> The scan pipeline currently runs through the CLI scripts, not over HTTP.
+> Importing an XML report through the API is not implemented yet.
+
+---
+
+## What's inside
+
+```
+app/
+  main.py                    FastAPI app and routes
+  models.py                  SQLAlchemy tables
+  schemas.py                 Pydantic validation
+  crud.py                    Asset database operations
+  parsers/openvas.py         Secure XML parsing (no DB access)
+  services/
+    openvas_import.py        Transactional import
+    risk_scoring.py          Contextual risk engine
+    detection_remediation.py Rules, alerts, remediation tasks
+    grc_pipeline.py          One-transaction orchestration
+  reports/                   Executive + technical PDFs
+  lab/                       Greenbone preflight and safe import
+dashboard/                   Read-only Streamlit UI
+scripts/                     Demo, reports, validation, import CLIs
+tests/                       205 tests + sanitized XML fixtures
 ```
 
-Only the fields included in a `PATCH` request are changed. All omitted fields
-keep their existing values.
+**Data model**
 
-Invalid IP addresses, blank owners, unsupported asset types, criticality outside
-1–5, and exposure values other than `internal` or `external` return HTTP `422
-Unprocessable Entity`. Reusing an IP address returns HTTP `409 Conflict`. A
-missing asset returns HTTP `404 Not Found`.
+```
+Asset ────────< AssetVulnerability >──────── Vulnerability
+                      ▲
+                      │
+                    Scan
+                      │
+                      ├──< RiskTreatment
+                      └──< Alert
+```
 
-## Run the tests
+SQLite enforces foreign keys and uniqueness, so a repeated import or a repeated
+rule run never creates duplicate findings, alerts, or tasks.
 
-With the virtual environment activated:
+---
+
+## Reports
+
+Three PDFs are generated from the same read-only database snapshot:
+
+- **Executive report** — one page, management view of posture and KPIs.
+- **Technical summary** — exactly three pages, top 10 priorities, roadmap.
+- **Findings appendix** — complete evidence, one card per finding.
+
+```powershell
+python scripts\generate_reports.py `
+  --database scripts\grc_dashboard_demo.db `
+  --output-dir output\pdf `
+  --organization "Demo Organization" `
+  --source-finding-count 3
+```
+
+A scanner result with multiple CVEs becomes several asset–vulnerability
+relationships, so the stored count and the original scanner count differ.
+Reports never guess the scanner count — pass `--source-finding-count` if you
+know it.
+
+---
+
+## Lab integration (safe by default)
+
+Greenbone/OpenVAS stays external. This project only consumes a manually
+exported XML report.
+
+```powershell
+python scripts\check_greenbone_lab.py --help          # non-destructive checks
+python scripts\validate_openvas_report.py report.xml  # parse only, no DB
+python scripts\import_openvas_report.py report.xml --database .\grc.db
+```
+
+The import command **dry-runs against a temporary database copy** by default.
+Writing to your real database requires the explicit `--confirm-import` flag.
+
+See [`docs/lab/greenbone_setup.md`](docs/lab/greenbone_setup.md) for the
+container setup and [`docs/lab/real_scan_checklist.md`](docs/lab/real_scan_checklist.md)
+for the authorized-scan checklist. Only scan systems you own or are explicitly
+authorized to test, on an isolated network.
+
+---
+
+## Tests
 
 ```powershell
 python -m pytest
 ```
 
-Tests use a temporary SQLite database, so they do not change your real `grc.db`.
+Tests run against a temporary SQLite database and never touch your real
+`grc.db`. Fixtures include malformed XML, XXE attempts, missing CVEs, multiple
+CVEs, and invalid CVSS values.
 
-## Why this matters in vulnerability management
+---
 
-A scanner result is useful only when you know which asset it belongs to and how
-important that asset is. Business criticality helps prioritize remediation, and
-exposure helps distinguish an internal system from one reachable from the
-internet. Later milestones can connect vulnerabilities and scan results to this
-asset inventory.
+## Honest limitations
+
+This is an educational and lab platform, not a production GRC suite.
+
+- **Not live detection.** It correlates imported scan results, offline. It is
+  not an IDS/IPS and does not monitor the network.
+- **"Automated remediation" means tracked task creation.** Nothing is patched,
+  isolated, or exploited automatically.
+- **No authentication.** Do not expose it to an untrusted network.
+- **SQLite only.** PostgreSQL and scanner API automation are deferred.
+- **Greenbone remains manual.** XML in, XML out.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
