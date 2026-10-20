@@ -70,13 +70,26 @@ critical alert and a tracked remediation task owned by the asset owner, due in
 
 ## Quick start
 
+Windows PowerShell, from the project folder. Python 3.10+ required.
+
 ```powershell
+# 1. Create the environment (first time only)
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+
+# 2. Run the API
 python -m uvicorn app.main:app --reload
 ```
 
+> If PowerShell blocks `Activate.ps1`, either run
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or skip activation
+> and call `.\.venv\Scripts\python.exe` directly in every command.
+
 Interactive API docs → <http://127.0.0.1:8000/docs> · health check → `/health`
+
+`grc.db` is created automatically on first start, so there is nothing to set up
+before creating your first asset.
 
 Run the full pipeline with no server and no scanner:
 
@@ -90,6 +103,16 @@ Launch the read-only dashboard:
 python scripts\prepare_dashboard_demo.py
 streamlit run dashboard\streamlit_app.py
 ```
+
+The dashboard opens `grc.db` by default. Point it at the demo database instead:
+
+```powershell
+$env:GRC_DASHBOARD_DB = (Resolve-Path .\scripts\grc_dashboard_demo.db).Path
+streamlit run dashboard\streamlit_app.py
+```
+
+You can also paste a database path into the dashboard sidebar. It opens any
+SQLite file read-only and can never modify it.
 
 ---
 
